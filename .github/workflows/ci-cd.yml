@@ -16,6 +16,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
       - name: Installer dépendances
         run: pip install -r requirements.txt
 
@@ -66,16 +67,21 @@ jobs:
           name: k8s-manifests
           path: k8s
 
-      - name: Création archive
+      - name: Création archive ZIP
         run: |
           mkdir KayeZabdielPython
           Move-Item k8s\* KayeZabdielPython\
           Compress-Archive -Path KayeZabdielPython\* -DestinationPath KayeZabdielPython.zip
 
+      - name: Préparer dossier pour FTP
+        run: |
+          mkdir ftp-upload
+          Move-Item KayeZabdielPython.zip ftp-upload\
+
       - uses: actions/upload-artifact@v4
         with:
           name: kube-zip
-          path: KayeZabdielPython.zip
+          path: ftp-upload/
 
   deploy:
     name: Upload FTP
@@ -86,14 +92,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: kube-zip
+          path: ftp-upload
 
-      - name: Upload sur FTP
+      - name: Upload ZIP sur FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./KayeZabdielPython.zip
+          local-dir: ./ftp-upload/
           server-dir: /RenduDevopsKube/
           dangerous-clean-slate: false
           state-name: "none"
