@@ -1,43 +1,38 @@
-name: Python CI/CD
+name: Python CI/CD Pipeline
+
 on:
   push:
     branches: [ main ]
+  pull_request:
 
 jobs:
-  build-test-deploy:
-    runs-on: ubuntu-latest
+  generate:
+    name: Génération manifests Kubernetes
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Installer Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
+      - name: Installer dépendances
         run: pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Lancer tests
         run: pytest
 
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v2
+      - name: Installer Kompose
+        run: curl -L https://github.com/kubernetes/kompose/releases/download/v1.32.0/kompose-windows-amd64.exe -o kompose.exe
 
-      - name: Build Docker image
-        run: docker build -t mon-python-app .
-
-      - name: Install Kompose
+      - name: Convertir docker-compose → k8s
         run: |
-          curl -L https://github.com/kubernetes/kompose/releases/download/v1.26.1/kompose-linux-amd64 -o kompose
-          chmod +x kompose
-          sudo mv kompose /usr/local/bin/
+          mkdir k8s
+          .\kompose.exe convert -f docker-compose.yml -o k8s\
 
-      - name: Generate Kubernetes manifests
-        run: kompose convert -f docker-compose.yml
-
-      - name: Create PVC
+      - name: Créer PVC
         run: |
-          cat <<EOF > python-app-pvc.yaml
+          @"
           apiVersion: v1
           kind: PersistentVolumeClaim
           metadata:
@@ -48,25 +43,57 @@ jobs:
             resources:
               requests:
                 storage: 5Gi
-          EOF
+          "@ | Out-File -FilePath k8s\python-app-pvc.yaml -Encoding utf8
 
-      - name: Mount PVC in Deployment
+      - name: Monter PVC dans Deployment
         run: |
-          sudo apt-get update && sudo apt-get install -y jq yq
-          yq eval '.spec.template.spec.containers[0].volumeMounts += [{"mountPath": "/app/data","name": "python-app-storage"}]' -i python-app-deployment.yaml
-          yq eval '.spec.template.spec.volumes += [{"name": "python-app-storage","persistentVolumeClaim":{"claimName":"python-app-pvc"}}]' -i python-app-deployment.yaml
+          (Get-Content k8s\python-app-deployment.yaml) -replace '(?<=containers:)', '  - volumeMounts: [{mountPath: "/app/data", name: "python-app-storage"}]' | Set-Content k8s\python-app-deployment.yaml
+          Add-Content k8s\python-app-deployment.yaml "  volumes: [{name: ""python-app-storage"", persistentVolumeClaim: {claimName: ""python-app-pvc""}}]"
 
-      - name: Zip manifests
+      - name: Sauvegarder manifestes
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-manifests
+          path: k8s/
+
+  package:
+    name: Packaging ZIP
+    needs: generate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: k8s-manifests
+          path: k8s
+
+      - name: Création archive
         run: |
           mkdir KayeZabdielPython
-          mv python-app-deployment.yaml python-app-service.yaml python-app-pvc.yaml KayeZabdielPython/
-          zip -r KayeZabdielPython.zip KayeZabdielPython
+          Move-Item k8s\* KayeZabdielPython\
+          Compress-Archive -Path KayeZabdielPython\* -DestinationPath KayeZabdielPython.zip
 
-      - name: Upload ZIP to FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4
+      - uses: actions/upload-artifact@v4
         with:
-          server: ftp.cluster114.hosting.ovh.net
-          username: ludivinej
+          name: kube-zip
+          path: KayeZabdielPython.zip
+
+  deploy:
+    name: Upload FTP
+    needs: package
+    runs-on: windows-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kube-zip
+
+      - name: Upload sur FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./KayeZabdielPython.zip
-          remote-dir: /RenduDevopsKube/
+          server-dir: /RenduDevopsKube/
+          dangerous-clean-slate: false
+          state-name: "none"
