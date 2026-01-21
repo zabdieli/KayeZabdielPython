@@ -69,14 +69,14 @@ jobs:
 
       - name: Création archive ZIP
         run: |
-          mkdir KayeZabdielPython
-          Move-Item k8s\* KayeZabdielPython\
-          Compress-Archive -Path KayeZabdielPython\* -DestinationPath KayeZabdielPython.zip
+          mkdir KayelahoutouZabdielPython
+          Move-Item k8s\* KayelahoutouZabdielPython\
+          Compress-Archive -Path KayeZabdielPython\* -DestinationPath KayelahoutouZabdielPython.zip
 
       - name: Préparer dossier pour FTP
         run: |
           mkdir ftp-upload
-          Move-Item KayeZabdielPython.zip ftp-upload\
+          Move-Item KayelahoutouZabdielPython.zip ftp-upload\
 
       - uses: actions/upload-artifact@v4
         with:
