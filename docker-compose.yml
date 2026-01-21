@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  python-app:
+    build: .
+    container_name: kayezabdiel-python
+    ports:
+      - "5001:5000"
+    volumes:
+      - .:/app
