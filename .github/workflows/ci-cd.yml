@@ -71,7 +71,7 @@ jobs:
         run: |
           mkdir KayelahoutouZabdielPython
           Move-Item k8s\* KayelahoutouZabdielPython\
-          Compress-Archive -Path KayeZabdielPython\* -DestinationPath KayelahoutouZabdielPython.zip
+          Compress-Archive -Path KayelahoutouZabdielPython\* -DestinationPath KayelahoutouZabdielPython.zip
 
       - name: Préparer dossier pour FTP
         run: |
